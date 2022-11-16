@@ -1,5 +1,5 @@
 {
-  "name": "@surikaterna/cordova-plugin-camera",
+  "name": "@surikat/cordova-plugin-camera",
   "version": "6.0.2-dev",
   "description": "Cordova Camera Plugin",
   "types": "./types/index.d.ts",
