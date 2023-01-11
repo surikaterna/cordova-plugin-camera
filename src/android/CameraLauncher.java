@@ -6,9 +6,7 @@
        to you under the Apache License, Version 2.0 (the
        "License"); you may not use this file except in compliance
        with the License.  You may obtain a copy of the License at
-
          http://www.apache.org/licenses/LICENSE-2.0
-
        Unless required by applicable law or agreed to in writing,
        software distributed under the License is distributed on an
        "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -128,8 +126,19 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
     private boolean orientationCorrected; // Has the picture's orientation been corrected
     private boolean allowEdit; // Should we allow the user to crop the image.
 
-    protected final static String[] permissions = { Manifest.permission.CAMERA,
-            Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE };
+    protected static String[] permissions;
+    protected static String[] storagePermissions;
+    static {
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions = new String[] { Manifest.permission.CAMERA, Manifest.permission.READ_MEDIA_IMAGES };
+            storagePermissions = new String[] { Manifest.permission.READ_MEDIA_IMAGES };
+        } else {
+            permissions = new String[] { Manifest.permission.CAMERA, Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE };
+            storagePermissions = new String[] { Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE };
+        }
+    }
 
     public CallbackContext callbackContext;
     private int numPics;
@@ -201,9 +210,8 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
                     this.callTakePicture(destType, encodingType);
                 } else if ((this.srcType == PHOTOLIBRARY) || (this.srcType == SAVEDPHOTOALBUM)) {
                     // FIXME: Stop always requesting the permission
-                    if (!PermissionHelper.hasPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)) {
-                        PermissionHelper.requestPermission(this, SAVE_TO_ALBUM_SEC,
-                                Manifest.permission.READ_EXTERNAL_STORAGE);
+                    if (!hasPermissions(storagePermissions)) {
+                        PermissionHelper.requestPermissions(this, SAVE_TO_ALBUM_SEC, storagePermissions);
                     } else {
                         this.getImage(this.srcType, destType);
                     }
@@ -254,8 +262,7 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
      *                     compression, 100=compress of max quality)
      */
     public void callTakePicture(int returnType, int encodingType) {
-        boolean saveAlbumPermission = PermissionHelper.hasPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-                && PermissionHelper.hasPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        boolean storagePermission = hasPermissions(storagePermissions);
         boolean takePicturePermission = PermissionHelper.hasPermission(this, Manifest.permission.CAMERA);
 
         // CB-10120: The CAMERA permission does not need to be requested unless it is
@@ -285,10 +292,10 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
             }
         }
 
-        if (takePicturePermission && saveAlbumPermission) {
+        if (takePicturePermission && storagePermission) {
             takePicture(returnType, encodingType);
-        } else if (saveAlbumPermission) {
-            PermissionHelper.requestPermission(this, TAKE_PIC_SEC, Manifest.permission.CAMERA);
+        } else if (storagePermission) {
+            PermissionHelper.requestPermissions(this, TAKE_PIC_SEC, storagePermissions);
         } else if (takePicturePermission) {
             PermissionHelper.requestPermissions(this, TAKE_PIC_SEC,
                     new String[] { Manifest.permission.READ_EXTERNAL_STORAGE,
@@ -1010,7 +1017,6 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
          * This is the only way to determine the orientation of the photo coming from
          * 3rd party providers (Google Drive, Dropbox,etc)
          * This also ensures we create a scaled bitmap with the correct orientation
-         * 
          * We delete the temporary file once we are done
          */
         File localFile = null;
@@ -1281,7 +1287,7 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
             try {
                 this.cordova.getActivity().getContentResolver().delete(uri, null, null);
             } catch (Exception ex) {
-                // avoid app crashing due to plugin not being able to delete temp file
+                LOG.e(LOG_TAG, "Unable to delete image: " + uri.toString(), ex);
             }
             cursor.close();
         }
@@ -1366,6 +1372,7 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
                 return;
             }
         }
+
         switch (requestCode) {
             case TAKE_PIC_SEC:
                 takePicture(this.destType, this.encodingType);
@@ -1439,5 +1446,14 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
         }
 
         this.callbackContext = callbackContext;
+    }
+
+    private boolean hasPermissions(String[] permissions) {
+        for (String permission : permissions) {
+            if (!PermissionHelper.hasPermission(this, permission)) {
+                return false;
+            }
+        }
+        return true;
     }
 }
